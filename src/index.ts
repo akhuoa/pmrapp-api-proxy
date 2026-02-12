@@ -22,14 +22,17 @@ export default {
 		const exposureAlias = url.searchParams.get('exposureAlias') || '';
 		const workspaceAlias = url.searchParams.get('workspaceAlias') || '';
 		const commitId = url.searchParams.get('commitId') || '';
-		const type = url.searchParams.get('type') || 'zip'; // 'tgz' or 'zip'
+		const format = url.searchParams.get('format') || 'zip'; // 'tgz' or 'zip'
 
-		let downloadUrl = '';
+		let downloadUrl = ''; // for workspace
+		let downloadUrlShort = ''; // for exposure (COMBINE archive)
+		let downloadUrlLong = ''; // for exposure (COMBINE archive)
+
 		if (exposureAlias) {
-			downloadUrl = `${env.MODELS_URL}/e/${exposureAlias}/download_generated_omex`;
-			// downloadUrl = `${env.MODELS_URL}/exposure/${exposureAlias}/download_generated_omex`;
+			downloadUrlShort = `${env.MODELS_URL}/e/${exposureAlias}/download_generated_omex`;
+			downloadUrlLong = `${env.MODELS_URL}/exposure/${exposureAlias}/download_generated_omex`;
 		} else if (workspaceAlias && commitId) {
-			downloadUrl = `${env.MODELS_URL}/workspace/${workspaceAlias}/@@archive/${commitId}/${type}`;
+			downloadUrl = `${env.MODELS_URL}/workspace/${workspaceAlias}/@@archive/${commitId}/${format}`;
 		} else {
 			return new Response('Bad Request: Missing parameters!', { status: 400 });
 		}
@@ -55,12 +58,21 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-		// Fetch the file from the download URL
-    const response = await fetch(downloadUrl);
-    if (!response.ok) {
-      return new Response('Failed to fetch the file!', { status: 500 });
-    }
-
-    return new Response(response.body, { headers: corsHeaders });
+		if (exposureAlias) {
+			let response = await fetch(downloadUrlShort);
+			if (!response.ok) {
+				response = await fetch(downloadUrlLong);
+			}
+			if (!response.ok) {
+				return new Response('Failed to fetch the file!', { status: 500 });
+			}
+			return new Response(response.body, { headers: corsHeaders });
+		} else {
+			const response = await fetch(downloadUrl);
+			if (!response.ok) {
+				return new Response('Failed to fetch the file!', { status: 500 });
+			}
+			return new Response(response.body, { headers: corsHeaders });
+		}
   },
 } satisfies ExportedHandler<Env>;
