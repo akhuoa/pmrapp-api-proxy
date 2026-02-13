@@ -19,10 +19,22 @@ export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const origin = request.headers.get('Origin') || '';
 		const url = new URL(request.url);
-		const exposureAlias = url.searchParams.get('exposureAlias') || '';
-		const workspaceAlias = url.searchParams.get('workspaceAlias') || '';
-		const commitId = url.searchParams.get('commitId') || '';
-		const format = url.searchParams.get('format') || 'zip'; // 'tgz' or 'zip'
+		const pathname = url.pathname;
+
+		let exposureAlias = '';
+		let workspaceAlias = '';
+		let commitId = '';
+		let format = 'zip';
+
+		if (pathname === '/download/exposure') {
+			exposureAlias = url.searchParams.get('alias') || '';
+		} else if (pathname === '/download/workspace') {
+			workspaceAlias = url.searchParams.get('alias') || '';
+			commitId = url.searchParams.get('commitId') || '';
+			format = url.searchParams.get('format') || 'zip';
+		} else {
+			return new Response('Not Found: Invalid endpoint!', { status: 404 });
+		}
 
 		let downloadUrl = ''; // for workspace
 		let downloadUrlShort = ''; // for exposure (COMBINE archive)

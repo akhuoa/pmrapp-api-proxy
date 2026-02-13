@@ -6,20 +6,33 @@ A Cloudflare Worker that proxies file downloads from the PMR models service.
 
 ### Request shape
 
-The worker validates the request origin, constructs and fetches the download URL, then proxies the file to the client.
+The worker accepts `GET` (and `HEAD`) requests using path-based routing:
 
-1. COMBINE archive download
-   - `exposureAlias` (required)
-   - The worker tries two URLs in sequence:
-     - `/e/{exposureAlias}/download_generated_omex` (short form)
-     - `/exposure/{exposureAlias}/download_generated_omex` (long form, fallback)
+#### 1. COMBINE archive
 
-2. Workspace archive download
-   - `workspaceAlias` (required)
-   - `commitId` (required)
-   - `format` (`zip` or `tgz`, defaults to `zip`)
+Path: `/download/exposure`
 
-If neither parameter set is provided, the worker returns `400 Bad Request`.
+Downloads a COMBINE archive for an exposure.
+
+**Query parameters:**
+- `alias` (required) - The exposure identifier
+
+The worker tries two upstream URLs in sequence:
+- `/e/{alias}/download_generated_omex` (short form)
+- `/exposure/{alias}/download_generated_omex` (long form, fallback)
+
+#### 2. Workspace archive
+
+Path: `/download/workspace`
+
+Downloads a workspace archive.
+
+**Query parameters:**
+- `alias` (required) - The workspace identifier
+- `commitId` (required) - The commit identifier
+- `format` - Archive format: `zip` or `tgz` (defaults to `zip`)
+
+If required parameters are missing, the worker returns `400 Bad Request`.
 
 ### CORS behavior
 
@@ -32,19 +45,19 @@ Allowlisted origins are defined in [src/config.ts](src/config.ts).
 COMBINE archive download:
 
 ```bash
-curl -L "http://localhost:8787/?exposureAlias=EXPOSURE_ALIAS"
+curl -L "http://localhost:8787/download/exposure?alias=EXPOSURE_ALIAS"
 ```
 
 Workspace archive download (zip):
 
 ```bash
-curl -L "http://localhost:8787/?workspaceAlias=WORKSPACE_ALIAS&commitId=COMMIT_ID&format=zip"
+curl -L "http://localhost:8787/download/workspace?alias=WORKSPACE_ALIAS&commitId=COMMIT_ID&format=zip"
 ```
 
 Workspace archive download (tgz):
 
 ```bash
-curl -L "http://localhost:8787/?workspaceAlias=WORKSPACE_ALIAS&commitId=COMMIT_ID&format=tgz"
+curl -L "http://localhost:8787/download/workspace?alias=WORKSPACE_ALIAS&commitId=COMMIT_ID&format=tgz"
 ```
 
 ### Notes
