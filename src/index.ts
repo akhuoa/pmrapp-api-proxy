@@ -9,18 +9,108 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { ALLOWED_ORIGINS } from './config';
+import { ALLOWED_ORIGINS, ALLOW_CORS_PROXY_URL_OVERRIDE } from './config';
 
 interface Env {
 	MODELS_URL: string;
+	CORS_PROXY_API_URL: string;
 }
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
-		const origin = request.headers.get('Origin') || '';
+		const origin = request.headers.get('Origin'); // Can be null
+		console.log(`Request received from origin: ${origin}`);
 		const url = new URL(request.url);
 		const pathname = url.pathname;
 
+		// CORS validation (applies to all paths)
+		let allowedOrigin = null;
+		// Allow if origin is in the list OR if the origin is null (e.g. server-to-server, curl)
+		if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+			allowedOrigin = origin || '*'; // Use '*' for null origins
+		}
+
+		if (!allowedOrigin) {
+      return new Response(`Forbidden: Access from origin ${origin} is not allowed.`, { status: 403 });
+    }
+
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": allowedOrigin,
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS, POST, PUT, DELETE, PATCH",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+		// Handle browser preflight checks
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+		// CORS Proxy path
+		if (pathname.startsWith('/cors-proxy')) {
+			const remainingPath = pathname.slice('/cors-proxy'.length);
+			const searchParams = url.searchParams.toString();
+			const fullPath = remainingPath + (searchParams ? '?' + searchParams : '');
+
+			let targetUrl = env.CORS_PROXY_API_URL;
+
+			// Check if URL override is allowed and provided
+			if (ALLOW_CORS_PROXY_URL_OVERRIDE) {
+				const overrideUrl = url.searchParams.get('target');
+				if (overrideUrl) {
+					targetUrl = overrideUrl;
+				}
+			}
+
+			if (!targetUrl) {
+				return new Response('Bad Request: CORS_PROXY_API_URL not configured!', { status: 400 });
+			}
+
+			const proxyUrl = targetUrl.replace(/\/$/, '') + fullPath;
+
+			try {
+				// Create headers from the original request
+				const proxyHeaders = new Headers(request.headers);
+
+				// Change origin: set the Host header to match the target API
+				const targetUrlObj = new URL(targetUrl);
+				proxyHeaders.set('Host', targetUrlObj.host);
+
+				// Remove or rewrite headers that might cause the upstream server to reject the request
+				proxyHeaders.delete('Origin');
+				proxyHeaders.delete('Referer');
+
+				const proxyResponse = await fetch(proxyUrl, {
+					method: request.method,
+					headers: proxyHeaders,
+					body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
+					redirect: 'manual', // Manually handle redirects
+				});
+
+				const responseHeaders = new Headers(proxyResponse.headers);
+				responseHeaders.set('Access-Control-Allow-Origin', allowedOrigin);
+
+				// Handle redirects by rewriting the Location header
+				if ([301, 302, 307, 308].includes(proxyResponse.status)) {
+					const location = proxyResponse.headers.get('Location');
+					if (location) {
+						const targetUrlObj = new URL(targetUrl);
+						const locationUrl = new URL(location, targetUrlObj.origin); // Ensure location is absolute
+						const newLocation = `/cors-proxy${locationUrl.pathname}${locationUrl.search}`;
+						responseHeaders.set('Location', newLocation);
+					}
+				}
+
+				return new Response(proxyResponse.body, {
+					status: proxyResponse.status,
+					statusText: proxyResponse.statusText,
+					headers: responseHeaders,
+				});
+			} catch (error) {
+				return new Response('Failed to proxy the request!', { status: 500 });
+			}
+		}
+
+		// Download paths
 		let exposureAlias = '';
 		let workspaceAlias = '';
 		let commitId = '';
@@ -48,27 +138,6 @@ export default {
 		} else {
 			return new Response('Bad Request: Missing parameters!', { status: 400 });
 		}
-
-		let allowedOrigin = null;
-
-		if (ALLOWED_ORIGINS.includes(origin)) {
-			allowedOrigin = origin;
-		}
-
-		if (!allowedOrigin) {
-      return new Response('Forbidden: Access Denied!', { status: 403 });
-    }
-
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": allowedOrigin,
-      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    };
-
-		// Handle browser preflight checks
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
-    }
 
 		if (exposureAlias) {
 			let response = await fetch(downloadUrlShort);

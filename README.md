@@ -1,6 +1,6 @@
 # pmrapp-download-proxy
 
-A Cloudflare Worker that proxies file downloads from the PMR models service.
+A Cloudflare Worker that proxies file downloads from the PMR models service and provides CORS-protected API proxying.
 
 ## Usage
 
@@ -32,6 +32,26 @@ Downloads a workspace archive.
 - `commitId` (required) - The commit identifier
 - `format` - Archive format: `zip` or `tgz` (defaults to `zip`)
 
+#### 3. CORS Proxy
+
+Path: `/cors-proxy/*`
+
+Proxies requests to a configured API endpoint, passing through all HTTP methods, headers, and request bodies.
+
+**Configuration:**
+- Set `CORS_PROXY_API_URL` in the environment.
+- By default, URL override is disabled. To enable it, set `ALLOW_CORS_PROXY_URL_OVERRIDE = true` in [src/config.ts](src/config.ts)
+
+**Usage:**
+
+```
+GET|POST|PUT|DELETE /cors-proxy/path/to/endpoint?param=value
+```
+
+The request is forwarded to `{CORS_PROXY_API_URL}/path/to/endpoint?param=value` with all headers and body preserved.
+
+If `ALLOW_CORS_PROXY_URL_OVERRIDE` is enabled, you can override the target URL with a `target` query parameter.
+
 If required parameters are missing, the worker returns `400 Bad Request`.
 
 ### CORS behavior
@@ -60,7 +80,22 @@ Workspace archive download (tgz):
 curl -L "http://localhost:8787/download/workspace?alias=WORKSPACE_ALIAS&commitId=COMMIT_ID&format=tgz"
 ```
 
+CORS proxy GET request:
+
+```bash
+curl -L "http://localhost:8787/cors-proxy/api/users?id=123"
+```
+
+CORS proxy POST request:
+
+```bash
+curl -X POST "http://localhost:8787/cors-proxy/api/data" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "value"}'
+```
+
 ### Notes
 
 - Preflight requests are handled with `OPTIONS` and return the appropriate CORS headers.
 - The worker streams the upstream response body directly to the client.
+- All HTTP methods (GET, HEAD, POST, PUT, DELETE, PATCH) are supported on the CORS proxy path.

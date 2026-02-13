@@ -32,6 +32,7 @@
 	 */
 	"vars": {
 		"MODELS_URL": "https://models.physiomeproject.org",
+		"CORS_PROXY_API_URL": "https://pmr3.demo.physiomeproject.org",
 	},
 	/**
 	 * Static Assets
