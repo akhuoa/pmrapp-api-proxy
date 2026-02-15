@@ -14,7 +14,7 @@ import { ALLOWED_ORIGINS, ALLOW_CORS_PROXY_URL_OVERRIDE } from './config';
 interface Env {
 	MODELS_URL: string;
 	CORS_PROXY_API_URL: string;
-	API_KEY?: string; // API_KEY is optional, will be undefined in local dev
+	API_KEY?: string; // API_KEY is optional, just for server-to-server requests in production
 }
 
 export default {

@@ -1,12 +1,12 @@
 # pmrapp-api-proxy
 
-A Cloudflare Worker that proxies file downloads from the PMR models service and provides CORS-protected API proxying.
+A multi-purpose API proxy for the PMR app, currently providing a download proxy service and a generic API proxy.
 
 ## Usage
 
 ### Request shape
 
-The worker accepts `GET` (and `HEAD`) requests using path-based routing:
+The worker uses path-based routing to handle incoming requests:
 
 #### 1. COMBINE archive
 
@@ -99,39 +99,38 @@ curl -L "http://localhost:8787/cors-proxy/api/users?id=123"
 
 #### Production (Deployed Worker)
 
-In the production environment, requests are made to your worker's URL (e.g., `https://your-worker.your-domain.workers.dev`) and **must** include your secret API key in the `X-API-Key` header.
+In the production environment, requests are made to your worker's URL (e.g., `https://pmrapp-api-proxy.[name].workers.dev`) and **must** include your secret API key in the `X-API-Key` header.
 
 **COMBINE archive download:**
 ```bash
-curl -L "https://your-worker.your-domain.workers.dev/download/exposure?alias=EXPOSURE_ALIAS" \
+curl -L "https://pmrapp-api-proxy.[name].workers.dev/download/exposure?alias=EXPOSURE_ALIAS" \
   -H "X-API-Key: YOUR_SECRET_KEY"
 ```
 
 **Workspace archive download (zip):**
 ```bash
-curl -L "https://your-worker.your-domain.workers.dev/download/workspace?alias=WORKSPACE_ALIAS&commitId=COMMIT_ID&format=zip" \
+curl -L "https://pmrapp-api-proxy.[name].workers.dev/download/workspace?alias=WORKSPACE_ALIAS&commitId=COMMIT_ID&format=zip" \
   -H "X-API-Key: YOUR_SECRET_KEY"
 ```
 
 **CORS proxy GET request:**
 ```bash
-curl -L "https://your-worker.your-domain.workers.dev/cors-proxy/api/users?id=123" \
+curl -L "https://pmrapp-api-proxy.[name].workers.dev/cors-proxy/api/users?id=123" \
   -H "X-API-Key: YOUR_SECRET_KEY"
 ```
 
 **CORS proxy POST request:**
 ```bash
-curl -X POST "https://your-worker.your-domain.workers.dev/cors-proxy/api/data" \
+curl -X POST "https://pmrapp-api-proxy.[name].workers.dev/cors-proxy/api/data" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_SECRET_KEY" \
   -d '{"key": "value"}'
 ```
 
-**TypeScript `fetch` example (for browser use):**
+**TypeScript `fetch` example:**
 ```typescript
 async function fetchFromWorker() {
-  // This code is safe for browsers because it relies on Origin validation, not a secret key.
-  const workerUrl = 'https://your-worker.your-domain.workers.dev/cors-proxy/api/data';
+  const workerUrl = 'https://pmrapp-api-proxy.[name].workers.dev/cors-proxy/api/data';
 
   try {
     const response = await fetch(workerUrl, {
