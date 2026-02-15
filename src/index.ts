@@ -14,36 +14,46 @@ import { ALLOWED_ORIGINS, ALLOW_CORS_PROXY_URL_OVERRIDE } from './config';
 interface Env {
 	MODELS_URL: string;
 	CORS_PROXY_API_URL: string;
+	API_KEY?: string; // API_KEY is optional, will be undefined in local dev
 }
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const origin = request.headers.get('Origin'); // Can be null
-		console.log(`Request received from origin: ${origin}`);
-		const url = new URL(request.url);
-		const pathname = url.pathname;
+		const apiKey = request.headers.get('X-API-Key');
+		const isDevelopment = !env.API_KEY; // API_KEY is only defined in production
 
-		// CORS validation (applies to all paths)
-		let allowedOrigin = null;
-		// Allow if origin is in the list OR if the origin is null (e.g. server-to-server, curl)
-		if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-			allowedOrigin = origin || '*'; // Use '*' for null origins
+		let isAllowed = false;
+
+		if (isDevelopment) {
+			// In development, allow all requests
+			isAllowed = true;
+		} else if (origin && ALLOWED_ORIGINS.includes(origin)) {
+			// In production, allow requests from whitelisted browser origins
+			isAllowed = true;
+		} else if (!origin && apiKey === env.API_KEY) {
+			// In production, allow server-to-server requests with a valid API key
+			isAllowed = true;
 		}
 
-		if (!allowedOrigin) {
-      return new Response(`Forbidden: Access from origin ${origin} is not allowed.`, { status: 403 });
-    }
+		if (!isAllowed) {
+			return new Response('Forbidden: Access Denied', { status: 403 });
+		}
 
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": allowedOrigin,
-      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS, POST, PUT, DELETE, PATCH",
-      "Access-Control-Allow-Headers": "Content-Type",
-    };
+		const allowedOrigin = origin || '*';
+		const corsHeaders = {
+			'Access-Control-Allow-Origin': allowedOrigin,
+			'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT, DELETE, PATCH',
+			'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+		};
 
 		// Handle browser preflight checks
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
-    }
+		if (request.method === 'OPTIONS') {
+			return new Response(null, { headers: corsHeaders });
+		}
+
+		const url = new URL(request.url);
+		const pathname = url.pathname;
 
 		// CORS Proxy path
 		if (pathname.startsWith('/cors-proxy')) {
