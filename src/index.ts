@@ -123,6 +123,7 @@ export default {
 		// Download paths
 		let exposureAlias = '';
 		let workspaceAlias = '';
+		let workspaceURL = '';
 		let commitId = '';
 		let format = 'zip';
 
@@ -130,6 +131,7 @@ export default {
 			exposureAlias = url.searchParams.get('alias') || '';
 		} else if (pathname === '/download/workspace') {
 			workspaceAlias = url.searchParams.get('alias') || '';
+			workspaceURL = url.searchParams.get('workspaceURL') || '';
 			commitId = url.searchParams.get('commitId') || '';
 			format = url.searchParams.get('format') || 'zip';
 		} else {
@@ -144,7 +146,12 @@ export default {
 			downloadUrlShort = `${env.MODELS_URL}/e/${exposureAlias}/download_generated_omex`;
 			downloadUrlLong = `${env.MODELS_URL}/exposure/${exposureAlias}/download_generated_omex`;
 		} else if (workspaceAlias && commitId) {
-			downloadUrl = `${env.MODELS_URL}/workspace/${workspaceAlias}/@@archive/${commitId}/${format}`;
+			if (workspaceURL) {
+				workspaceURL = workspaceURL.replace(/\/+$/, ''); // Remove trailing slashes
+				downloadUrl = `${workspaceURL}/@@archive/${commitId}/${format}`;
+			} else {
+				downloadUrl = `${env.MODELS_URL}/workspace/${workspaceAlias}/@@archive/${commitId}/${format}`;
+			}
 		} else {
 			return new Response('Bad Request: Missing parameters!', { status: 400 });
 		}
