@@ -44,7 +44,7 @@ export default {
 		const corsHeaders = {
 			'Access-Control-Allow-Origin': allowedOrigin,
 			'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT, DELETE, PATCH',
-			'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+			'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization',
 		};
 
 		// Handle browser preflight checks
