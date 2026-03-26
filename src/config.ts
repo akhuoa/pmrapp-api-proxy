@@ -5,5 +5,3 @@ export const ALLOWED_ORIGINS = [
 	"https://akhuoa.github.io",
 	"https://physiome.github.io"
 ];
-
-export const ALLOW_CORS_PROXY_URL_OVERRIDE = false;

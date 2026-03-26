@@ -9,12 +9,13 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { ALLOWED_ORIGINS, ALLOW_CORS_PROXY_URL_OVERRIDE } from './config';
+import { ALLOWED_ORIGINS } from './config';
 
 interface Env {
 	MODELS_URL: string;
 	CORS_PROXY_API_URL: string;
 	API_KEY?: string; // API_KEY is optional, just for server-to-server requests in production
+	ALLOW_CORS_PROXY_URL_OVERRIDE: boolean;
 }
 
 export default {
@@ -64,7 +65,7 @@ export default {
 			let targetUrl = env.CORS_PROXY_API_URL;
 
 			// Check if URL override is allowed and provided
-			if (ALLOW_CORS_PROXY_URL_OVERRIDE) {
+			if (env.ALLOW_CORS_PROXY_URL_OVERRIDE) {
 				const overrideUrl = url.searchParams.get('target');
 				if (overrideUrl) {
 					targetUrl = overrideUrl;
