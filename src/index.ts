@@ -8,19 +8,18 @@
  *
  * Learn more at https://developers.cloudflare.com/workers/
  */
-
-import { ALLOWED_ORIGINS } from './config';
-
 interface Env {
 	MODELS_URL: string;
 	CORS_PROXY_API_URL: string;
 	API_KEY?: string; // API_KEY is optional, just for server-to-server requests in production
 	ALLOW_CORS_PROXY_URL_OVERRIDE: boolean;
+	ALLOWED_HOSTS: string[]; // List of allowed hosts for browser requests in production
 }
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const origin = request.headers.get('Origin'); // Can be null
+		const host = request.headers.get('Host'); // Can be null, but should be present in valid requests
 		const apiKey = request.headers.get('X-API-Key');
 		const isDevelopment = !env.API_KEY; // API_KEY is only defined in production
 
@@ -29,7 +28,7 @@ export default {
 		if (isDevelopment) {
 			// In development, allow all requests
 			isAllowed = true;
-		} else if (origin && ALLOWED_ORIGINS.includes(origin)) {
+		} else if (env.ALLOWED_HOSTS.some((h) => host?.endsWith(h))) {
 			// In production, allow requests from whitelisted browser origins
 			isAllowed = true;
 		} else if (!origin && apiKey === env.API_KEY) {
