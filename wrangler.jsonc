@@ -30,6 +30,7 @@
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
+	"keep_vars": true,
 	"vars": {
 		"MODELS_URL": "https://models.physiomeproject.org",
 		"CORS_PROXY_API_URL": "https://pmr3.demo.physiomeproject.org",
