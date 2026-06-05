@@ -40,7 +40,6 @@ Proxies requests to a configured API endpoint, passing through all HTTP methods,
 
 **Configuration:**
 - Set `CORS_PROXY_API_URL` in the environment.
-- By default, URL override is disabled. To enable it, set `ALLOW_CORS_PROXY_URL_OVERRIDE = true` in [src/config.ts](src/config.ts)
 
 **Usage:**
 
@@ -60,7 +59,7 @@ The worker uses a hybrid authentication model to ensure security and flexibility
 
 **1. Browser-based Requests**
 - **Method:** Origin Validation
-- **How it works:** Requests from a browser are only allowed if their `Origin` header matches an entry in the `ALLOWED_ORIGINS` list in `src/config.ts`. This is secure for client-side use as no secrets are exposed.
+- **How it works:** Requests from a browser are only allowed if their `Origin` header matches an entry in the `ALLOWED_ORIGINS` list in `env`. This is secure for client-side use as no secrets are exposed.
 - **Use Case:** Your trusted front-end applications.
 
 **2. Server-to-Server Requests**
@@ -73,7 +72,7 @@ The worker uses a hybrid authentication model to ensure security and flexibility
 - **How it works:** No authentication is required when running the worker locally. All requests are permitted to simplify development.
 
 **Configuration:**
-- **Allowed Origins:** Add your website domains to the `ALLOWED_ORIGINS` array in `src/config.ts`.
+- **Allowed Origins:** Add your website domains to the `ALLOWED_ORIGINS` array in `env`.
 - **API Key:** Set your secret `API_KEY` in your production environment (e.g., using `wrangler secret put API_KEY`).
 
 ### Examples
