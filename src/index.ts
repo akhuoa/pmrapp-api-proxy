@@ -13,22 +13,22 @@ interface Env {
 	CORS_PROXY_API_URL: string;
 	API_KEY?: string; // API_KEY is optional, just for server-to-server requests in production
 	ALLOW_CORS_PROXY_URL_OVERRIDE: boolean;
-	ALLOWED_HOSTS: string[]; // List of allowed hosts for browser requests in production
+	ALLOWED_ORIGINS: string; // List of allowed origins for browser requests in production
 }
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const origin = request.headers.get('Origin'); // Can be null
-		const host = request.headers.get('host');
 		const apiKey = request.headers.get('X-API-Key');
 		const isDevelopment = !env.API_KEY; // API_KEY is only defined in production
+		const allowedOrigins = env.ALLOWED_ORIGINS.split(',')
 
 		let isAllowed = false;
 
 		if (isDevelopment) {
 			// In development, allow all requests
 			isAllowed = true;
-		} else if (env.ALLOWED_HOSTS.some((h) => host?.endsWith(h))) {
+		} else if (allowedOrigins.some((h) => origin?.endsWith(h))) {
 			// In production, allow requests from whitelisted browser origins
 			isAllowed = true;
 		} else if (!origin && apiKey === env.API_KEY) {
