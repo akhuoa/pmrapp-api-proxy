@@ -19,7 +19,7 @@ interface Env {
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const origin = request.headers.get('Origin'); // Can be null
-		const host = request.headers.get('Host'); // Can be null, but should be present in valid requests
+		const host = request.headers.get('host');
 		const apiKey = request.headers.get('X-API-Key');
 		const isDevelopment = !env.API_KEY; // API_KEY is only defined in production
 
