@@ -14,6 +14,15 @@ interface Env {
 	API_KEY?: string; // API_KEY is optional, just for server-to-server requests in production
 	ALLOW_CORS_PROXY_URL_OVERRIDE: boolean;
 	ALLOWED_ORIGINS: string; // List of allowed origins for browser requests in production
+	GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
+}
+
+interface GitHubEmail {
+  email: string;
+  primary: boolean;
+  verified: boolean;
+  visibility: string | null;
 }
 
 export default {
@@ -54,6 +63,110 @@ export default {
 
 		const url = new URL(request.url);
 		const pathname = url.pathname;
+
+		// Only intercept POST requests hitting your auth endpoint (e.g., /api/auth)
+    if (request.method === "POST" && url.pathname === "/api/auth") {
+      try {
+        const { code } = await request.json<{ code: string }>();
+
+        if (!code) {
+          return new Response(JSON.stringify({ error: "Missing code" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+
+        // 1. Exchange the temporary code for a GitHub Access Token
+        const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "User-Agent": "cloudflare-worker-vue-app",
+          },
+          body: JSON.stringify({
+            client_id: env.GITHUB_CLIENT_ID,
+            client_secret: env.GITHUB_CLIENT_SECRET,
+            code: code,
+          }),
+        });
+
+        const tokenData = await tokenResponse.json<{ access_token?: string; error?: string }>();
+
+        if (tokenData.error || !tokenData.access_token) {
+          return new Response(JSON.stringify({ error: tokenData.error || "Failed token exchange" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+
+        // 2. Use the Access Token to get User Profile data
+        const userResponse = await fetch("https://api.github.com/user", {
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+            Accept: "application/json",
+            "User-Agent": "cloudflare-worker-vue-app",
+          },
+        });
+
+        const userData = await userResponse.json<{ login: string; name: string; email: string | null }>();
+
+        // 3. Fallback check: If the user's email is private, fetch it from the emails endpoint
+        let finalEmail = userData.email;
+
+				if (!finalEmail) {
+					const emailResponse = await fetch("https://api.github.com/user/emails", {
+						headers: {
+							Authorization: `Bearer ${tokenData.access_token}`,
+							Accept: "application/json",
+							"User-Agent": "cloudflare-worker-vue-app",
+						},
+					});
+
+					// Cast the response to our strict array type
+					const emails = await emailResponse.json<GitHubEmail[]>();
+
+					if (Array.isArray(emails) && emails.length > 0) {
+						// Look for the primary email address
+						const primaryItem = emails.find((e) => e.primary);
+
+						if (primaryItem) {
+							finalEmail = primaryItem.email;
+						} else {
+							// If no primary is flagged, safely grab the first index
+							const firstItem = emails[0];
+							finalEmail = firstItem ? firstItem.email : "No email available";
+						}
+					} else {
+						finalEmail = "No email available";
+					}
+				}
+
+        // 4. Return the clean data back to your Vue app
+        // IMPORTANT: Added CORS headers so your Vue app running on localhost:5173 can read it
+        return new Response(
+          JSON.stringify({
+						token: 'test_token', // You might want to generate a JWT or some other token here
+            username: userData.login,
+            name: userData.name || userData.login,
+            email: finalEmail,
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*", // Or your specific frontend URL
+              "Access-Control-Allow-Headers": "Content-Type"
+            }
+          }
+        );
+
+      } catch (error: any) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    }
 
 		// CORS Proxy path
 		if (pathname.startsWith('/cors-proxy')) {
