@@ -11,7 +11,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
 			});
 		}
 
-		// 1. Exchange the temporary code for a GitHub Access Token
+		// Exchange the temporary code for a GitHub Access Token
 		const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
 			method: 'POST',
 			headers: {
@@ -35,7 +35,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
 			});
 		}
 
-		// 2. Use the Access Token to get User Profile data
+		// Use the Access Token to get User Profile data
 		const userResponse = await fetch('https://api.github.com/user', {
 			headers: {
 				Authorization: `Bearer ${tokenData.access_token}`,
@@ -46,7 +46,8 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
 
 		const userData = await userResponse.json<{ login: string; name: string; email: string | null }>();
 
-		// 3. Fallback check: If the user's email is private, fetch it from the emails endpoint
+		// Fallback check: If the user's email is private,
+		// fetch it from the emails endpoint
 		let finalEmail = userData.email;
 
 		if (!finalEmail) {
@@ -74,10 +75,10 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
 			}
 		}
 
-		// 4. Return the clean data back to your Vue app
+		// to generate a JWT or some other token
 		return new Response(
 			JSON.stringify({
-				token: 'test_token', // You might want to generate a JWT or some other token here
+				token: 'test_token',
 				username: userData.login,
 				name: userData.name || userData.login,
 				email: finalEmail,
