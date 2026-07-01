@@ -8,29 +8,17 @@
  *
  * Learn more at https://developers.cloudflare.com/workers/
  */
-interface Env {
-	MODELS_URL: string;
-	CORS_PROXY_API_URL: string;
-	API_KEY?: string; // API_KEY is optional, just for server-to-server requests in production
-	ALLOW_CORS_PROXY_URL_OVERRIDE: boolean;
-	ALLOWED_ORIGINS: string; // List of allowed origins for browser requests in production
-	GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
-}
-
-interface GitHubEmail {
-  email: string;
-  primary: boolean;
-  verified: boolean;
-  visibility: string | null;
-}
+import { Env } from './types';
+import { handleAuth } from './handlers/auth';
+import { handleCorsProxy } from './handlers/corsProxy';
+import { handleDownload } from './handlers/download';
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const origin = request.headers.get('Origin'); // Can be null
 		const apiKey = request.headers.get('X-API-Key');
 		const isDevelopment = !env.API_KEY; // API_KEY is only defined in production
-		const allowedOrigins = env.ALLOWED_ORIGINS.split(',')
+		const allowedOrigins = env.ALLOWED_ORIGINS.split(',');
 
 		let isAllowed = false;
 
@@ -64,226 +52,18 @@ export default {
 		const url = new URL(request.url);
 		const pathname = url.pathname;
 
-		// Only intercept POST requests hitting your auth endpoint (e.g., /api/auth)
-    if (request.method === "POST" && url.pathname === "/api/auth") {
-      try {
-        const { code } = await request.json<{ code: string }>();
+		if (request.method === 'POST' && pathname === '/api/auth') {
+			return handleAuth(request, env);
+		}
 
-        if (!code) {
-          return new Response(JSON.stringify({ error: "Missing code" }), {
-            status: 400,
-            headers: { "Content-Type": "application/json" }
-          });
-        }
-
-        // 1. Exchange the temporary code for a GitHub Access Token
-        const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "User-Agent": "cloudflare-worker-vue-app",
-          },
-          body: JSON.stringify({
-            client_id: env.GITHUB_CLIENT_ID,
-            client_secret: env.GITHUB_CLIENT_SECRET,
-            code: code,
-          }),
-        });
-
-        const tokenData = await tokenResponse.json<{ access_token?: string; error?: string }>();
-
-        if (tokenData.error || !tokenData.access_token) {
-          return new Response(JSON.stringify({ error: tokenData.error || "Failed token exchange" }), {
-            status: 400,
-            headers: { "Content-Type": "application/json" }
-          });
-        }
-
-        // 2. Use the Access Token to get User Profile data
-        const userResponse = await fetch("https://api.github.com/user", {
-          headers: {
-            Authorization: `Bearer ${tokenData.access_token}`,
-            Accept: "application/json",
-            "User-Agent": "cloudflare-worker-vue-app",
-          },
-        });
-
-        const userData = await userResponse.json<{ login: string; name: string; email: string | null }>();
-
-        // 3. Fallback check: If the user's email is private, fetch it from the emails endpoint
-        let finalEmail = userData.email;
-
-				if (!finalEmail) {
-					const emailResponse = await fetch("https://api.github.com/user/emails", {
-						headers: {
-							Authorization: `Bearer ${tokenData.access_token}`,
-							Accept: "application/json",
-							"User-Agent": "cloudflare-worker-vue-app",
-						},
-					});
-
-					// Cast the response to our strict array type
-					const emails = await emailResponse.json<GitHubEmail[]>();
-
-					if (Array.isArray(emails) && emails.length > 0) {
-						// Look for the primary email address
-						const primaryItem = emails.find((e) => e.primary);
-
-						if (primaryItem) {
-							finalEmail = primaryItem.email;
-						} else {
-							// If no primary is flagged, safely grab the first index
-							const firstItem = emails[0];
-							finalEmail = firstItem ? firstItem.email : "No email available";
-						}
-					} else {
-						finalEmail = "No email available";
-					}
-				}
-
-        // 4. Return the clean data back to your Vue app
-        // IMPORTANT: Added CORS headers so your Vue app running on localhost:5173 can read it
-        return new Response(
-          JSON.stringify({
-						token: 'test_token', // You might want to generate a JWT or some other token here
-            username: userData.login,
-            name: userData.name || userData.login,
-            email: finalEmail,
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*", // Or your specific frontend URL
-              "Access-Control-Allow-Headers": "Content-Type"
-            }
-          }
-        );
-
-      } catch (error: any) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
-    }
-
-		// CORS Proxy path
 		if (pathname.startsWith('/cors-proxy')) {
-			const remainingPath = pathname.slice('/cors-proxy'.length);
-			const searchParams = url.searchParams.toString();
-			const fullPath = remainingPath + (searchParams ? '?' + searchParams : '');
-
-			let targetUrl = env.CORS_PROXY_API_URL;
-
-			// Check if URL override is allowed and provided
-			if (env.ALLOW_CORS_PROXY_URL_OVERRIDE) {
-				const overrideUrl = url.searchParams.get('target');
-				if (overrideUrl) {
-					targetUrl = overrideUrl;
-				}
-			}
-
-			if (!targetUrl) {
-				return new Response('Bad Request: CORS_PROXY_API_URL not configured!', { status: 400 });
-			}
-
-			const proxyUrl = targetUrl.replace(/\/$/, '') + fullPath;
-
-			try {
-				// Create headers from the original request
-				const proxyHeaders = new Headers(request.headers);
-
-				// Change origin: set the Host header to match the target API
-				const targetUrlObj = new URL(targetUrl);
-				proxyHeaders.set('Host', targetUrlObj.host);
-
-				// Remove or rewrite headers that might cause the upstream server to reject the request
-				proxyHeaders.delete('Origin');
-				proxyHeaders.delete('Referer');
-
-				const proxyResponse = await fetch(proxyUrl, {
-					method: request.method,
-					headers: proxyHeaders,
-					body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
-					redirect: 'manual', // Manually handle redirects
-				});
-
-				const responseHeaders = new Headers(proxyResponse.headers);
-				responseHeaders.set('Access-Control-Allow-Origin', allowedOrigin);
-
-				// Handle redirects by rewriting the Location header
-				if ([301, 302, 307, 308].includes(proxyResponse.status)) {
-					const location = proxyResponse.headers.get('Location');
-					if (location) {
-						const targetUrlObj = new URL(targetUrl);
-						const locationUrl = new URL(location, targetUrlObj.origin); // Ensure location is absolute
-						const newLocation = `/cors-proxy${locationUrl.pathname}${locationUrl.search}`;
-						responseHeaders.set('Location', newLocation);
-					}
-				}
-
-				return new Response(proxyResponse.body, {
-					status: proxyResponse.status,
-					statusText: proxyResponse.statusText,
-					headers: responseHeaders,
-				});
-			} catch (error) {
-				return new Response('Failed to proxy the request!', { status: 500 });
-			}
+			return handleCorsProxy(request, env, url, allowedOrigin);
 		}
 
-		// Download paths
-		let exposureAlias = '';
-		let workspaceAlias = '';
-		let workspaceURL = '';
-		let commitId = '';
-		let format = 'zip';
-
-		if (pathname === '/download/exposure') {
-			exposureAlias = url.searchParams.get('alias') || '';
-		} else if (pathname === '/download/workspace') {
-			workspaceAlias = url.searchParams.get('alias') || '';
-			workspaceURL = url.searchParams.get('workspaceURL') || '';
-			commitId = url.searchParams.get('commitId') || '';
-			format = url.searchParams.get('format') || 'zip';
-		} else {
-			return new Response('Not Found: Invalid endpoint!', { status: 404 });
+		if (pathname.startsWith('/download/')) {
+			return handleDownload(request, env, url, corsHeaders);
 		}
 
-		let downloadUrl = ''; // for workspace
-		let downloadUrlShort = ''; // for exposure (COMBINE archive)
-		let downloadUrlLong = ''; // for exposure (COMBINE archive)
-
-		if (exposureAlias) {
-			downloadUrlShort = `${env.MODELS_URL}/e/${exposureAlias}/download_generated_omex`;
-			downloadUrlLong = `${env.MODELS_URL}/exposure/${exposureAlias}/download_generated_omex`;
-		} else if (workspaceAlias && commitId) {
-			if (workspaceURL) {
-				workspaceURL = workspaceURL.replace(/\/+$/, ''); // Remove trailing slashes
-				downloadUrl = `${workspaceURL}/@@archive/${commitId}/${format}`;
-			} else {
-				downloadUrl = `${env.MODELS_URL}/workspace/${workspaceAlias}/@@archive/${commitId}/${format}`;
-			}
-		} else {
-			return new Response('Bad Request: Missing parameters!', { status: 400 });
-		}
-
-		if (exposureAlias) {
-			let response = await fetch(downloadUrlShort);
-			if (!response.ok) {
-				response = await fetch(downloadUrlLong);
-			}
-			if (!response.ok) {
-				return new Response('Failed to fetch the file!', { status: 500 });
-			}
-			return new Response(response.body, { headers: corsHeaders });
-		} else {
-			const response = await fetch(downloadUrl);
-			if (!response.ok) {
-				return new Response('Failed to fetch the file!', { status: 500 });
-			}
-			return new Response(response.body, { headers: corsHeaders });
-		}
-  },
+		return new Response('Not Found: Invalid endpoint!', { status: 404 });
+	},
 } satisfies ExportedHandler<Env>;
