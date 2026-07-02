@@ -9,7 +9,7 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 import { Env } from './types';
-import { handleAuth } from './handlers/auth';
+import { handleAuth, handleRevoke } from './handlers/auth';
 import { handleCorsProxy } from './handlers/corsProxy';
 import { handleDownload } from './handlers/download';
 
@@ -52,8 +52,12 @@ export default {
 		const url = new URL(request.url);
 		const pathname = url.pathname;
 
+		if (request.method === 'POST' && pathname === '/api/auth/revoke') {
+			return handleRevoke(request, env, allowedOrigin);
+		}
+
 		if (request.method === 'POST' && pathname === '/api/auth') {
-			return handleAuth(request, env);
+			return handleAuth(request, env, allowedOrigin);
 		}
 
 		if (pathname.startsWith('/cors-proxy')) {
