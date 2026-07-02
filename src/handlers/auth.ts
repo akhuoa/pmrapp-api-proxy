@@ -44,7 +44,13 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
 			},
 		});
 
-		const userData = await userResponse.json<{ login: string; name: string; email: string | null }>();
+		// Response data and schema ref: docs.github.com/en/rest/users/users?apiVersion=2026-03-10
+		const userData = await userResponse.json<{
+			login: string;
+			name: string;
+			email: string | null;
+			avatar_url: string
+		}>();
 
 		// Fallback check: If the user's email is private,
 		// fetch it from the emails endpoint
@@ -82,6 +88,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
 				username: userData.login,
 				name: userData.name || userData.login,
 				email: finalEmail,
+				avatar_url: userData.avatar_url,
 			}),
 			{
 				headers: {
