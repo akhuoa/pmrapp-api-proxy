@@ -35,7 +35,6 @@
 		"MODELS_URL": "https://models.physiomeproject.org",
 		"CORS_PROXY_API_URL": "https://pmr3.demo.physiomeproject.org",
 		"ALLOW_CORS_PROXY_URL_OVERRIDE": true,
-		"ALLOWED_ORIGINS": "localhost",
 	},
 	/**
 	 * Static Assets
