@@ -20,8 +20,6 @@ export async function handleCorsProxy(
 		targetUrl = env.CORS_PROXY_API_URL;
 	}
 
-	console.log('targetUrl', targetUrl);
-
 	if (!targetUrl) {
 		return new Response(
 			'Bad Request: No target URL provided and CORS_PROXY_API_URL not configured. Pass ?target=<url> or set CORS_PROXY_API_URL.',
@@ -42,9 +40,6 @@ export async function handleCorsProxy(
 		// Remove or rewrite headers that might cause the upstream server to reject the request
 		proxyHeaders.delete('Origin');
 		proxyHeaders.delete('Referer');
-
-		console.log('proxyUrl', proxyUrl);
-		console.log('proxyHeaders', Object.fromEntries(proxyHeaders.entries()));
 
 		const proxyResponse = await fetch(proxyUrl, {
 			method: request.method,
