@@ -6,6 +6,7 @@ export interface Env {
 	ALLOWED_ORIGINS: string; // List of allowed origins for browser requests in production
 	GITHUB_CLIENT_ID: string;
 	GITHUB_CLIENT_SECRET: string;
+	TOKEN_EXPIRY_HOURS?: string; // Token expiry in hours (e.g., "72" for 3 days, "168" for 7 days). Falls back to 72 if not set.
 }
 
 export interface GitHubEmail {

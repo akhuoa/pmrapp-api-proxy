@@ -1,5 +1,6 @@
 import { Env, GitHubEmail } from '../types';
 import { decryptToken, encryptToken } from '../utils/crypto';
+import { signToken, verifyToken } from '../utils/jwt';
 
 function corsHeaders(allowedOrigin: string) {
 	return {
@@ -17,33 +18,48 @@ function jsonHeaders(allowedOrigin: string) {
 
 export async function handleRevoke(request: Request, env: Env, allowedOrigin: string): Promise<Response> {
 	try {
-		// Read the encrypted token from either Authorization header or JSON body
+		// Read the JWT from either Authorization header or JSON body
 		const authHeader = request.headers.get('Authorization') || '';
-		let encryptedToken: string | undefined;
+		let jwt: string | undefined;
 
 		if (authHeader.startsWith('Bearer ')) {
-			encryptedToken = authHeader.slice('Bearer '.length);
+			jwt = authHeader.slice('Bearer '.length);
 		} else if (
 			request.headers.get('Content-Type')?.includes('application/json')
 		) {
 			const body = await request.json<{ access_token?: string }>();
-			encryptedToken = body.access_token;
+			jwt = body.access_token;
 		}
 
-		if (!encryptedToken) {
+		if (!jwt) {
 			return new Response(
 				JSON.stringify({
 					error: 'Missing token',
-					detail: 'Send the encrypted token as Authorization: Bearer <token> or in the JSON body as { access_token: string }',
+					detail: 'Send the JWT as Authorization: Bearer <token> or in the JSON body as { access_token: string }',
 				}),
 				{ status: 400, headers: jsonHeaders(allowedOrigin) },
 			);
 		}
 
-		// Decrypt the token that was encrypted before sending to the frontend
+		// Verify the JWT — this checks the signature AND the exp claim automatically.
+		// If the token is expired, jose will throw and we catch it below.
+		let encryptedToken: string;
+		try {
+			const payload = await verifyToken(jwt, env.GITHUB_CLIENT_SECRET);
+			encryptedToken = payload.sub;
+		} catch {
+			return new Response(
+				JSON.stringify({ error: 'Invalid, tampered, or expired token' }),
+				{ status: 400, headers: jsonHeaders(allowedOrigin) },
+			);
+		}
+
+		// Decrypt the GitHub access token from the encrypted payload
 		let access_token: string;
 		try {
-			access_token = await decryptToken(encryptedToken, env.GITHUB_CLIENT_SECRET);
+			const decrypted = await decryptToken(encryptedToken, env.GITHUB_CLIENT_SECRET);
+			const payload = JSON.parse(decrypted);
+			access_token = payload.token;
 		} catch {
 			return new Response(JSON.stringify({ error: 'Invalid or tampered token' }), {
 				status: 400,
@@ -172,15 +188,23 @@ export async function handleAuth(request: Request, env: Env, allowedOrigin: stri
 			}
 		}
 
-		// Encrypt the GitHub access token so it's never exposed to the frontend in plaintext
+		// Encrypt the GitHub access token with AES-GCM so it's never exposed to the frontend
+		// in plaintext. Embed issued_at inside so the backend is the sole authority on expiry.
+		const expiryHours = parseInt(env.TOKEN_EXPIRY_HOURS || '72', 10);
+		const issuedAt = Date.now();
 		const encryptedToken = await encryptToken(
-			tokenData.access_token,
+			JSON.stringify({ token: tokenData.access_token, issued_at: issuedAt }),
 			env.GITHUB_CLIENT_SECRET
 		);
 
+		// Wrap the encrypted token in a signed JWT with exp and iat claims.
+		// The client can base64-decode the JWT payload to read exp locally,
+		// but cannot tamper with it because the signature is verified server-side.
+		const jwt = await signToken(encryptedToken, env.GITHUB_CLIENT_SECRET, expiryHours);
+
 		return new Response(
 			JSON.stringify({
-				token: encryptedToken,
+				token: jwt,
 				username: userData.login,
 				name: userData.name || userData.login,
 				email: finalEmail,
